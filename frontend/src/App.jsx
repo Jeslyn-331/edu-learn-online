@@ -15,6 +15,7 @@ import Wallet from './pages/Wallet';
 import Dashboard from './pages/Dashboard';
 import InstructorDashboard from './pages/InstructorDashboard';
 import ManageCourse from './pages/ManageCourse';
+import Certificates from './pages/Certificates';
 
 // ============================================================
 // Protected Route Component
@@ -83,6 +84,9 @@ function App() {
                 } />
                 <Route path="/dashboard" element={
                     <ProtectedRoute><Dashboard /></ProtectedRoute>
+                } />
+                <Route path="/certificates" element={
+                    <ProtectedRoute><Certificates /></ProtectedRoute>
                 } />
                 
                 {/* Instructor-only routes */}

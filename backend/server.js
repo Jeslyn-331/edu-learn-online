@@ -20,6 +20,7 @@ const walletRoutes = require('./routes/wallet');
 const purchaseRoutes = require('./routes/purchases');
 const progressRoutes = require('./routes/progress');
 const adminRoutes = require('./routes/admin');
+const certificateRoutes = require('./routes/certificates');
 
 // Initialize Express app
 const app = express();
@@ -83,6 +84,9 @@ app.use('/api/progress', progressRoutes);
 
 // Admin/Instructor routes (dashboard, earnings)
 app.use('/api/admin', adminRoutes);
+
+// Certificate routes (generate, view, verify certificates)
+app.use('/api/certificates', certificateRoutes);
 
 // ============================================================
 // ERROR HANDLING

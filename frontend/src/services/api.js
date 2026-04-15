@@ -98,6 +98,17 @@ export const progressAPI = {
 };
 
 // ============================================================
+// CERTIFICATE API CALLS
+// ============================================================
+export const certificateAPI = {
+    getAll: () => API.get('/certificates'),
+    getById: (id) => API.get(`/certificates/${id}`),
+    generate: (courseId) => API.post(`/certificates/generate/${courseId}`),
+    check: (courseId) => API.get(`/certificates/check/${courseId}`),
+    verify: (code) => API.get(`/certificates/verify/${code}`),
+};
+
+// ============================================================
 // ADMIN API CALLS
 // ============================================================
 export const adminAPI = {

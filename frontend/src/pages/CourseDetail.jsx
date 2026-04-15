@@ -5,7 +5,7 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { courseAPI, purchaseAPI } from '../services/api';
+import { courseAPI, purchaseAPI, certificateAPI, progressAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
 function CourseDetail() {
@@ -16,11 +16,47 @@ function CourseDetail() {
     const [loading, setLoading] = useState(true);
     const [purchasing, setPurchasing] = useState(false);
     const [message, setMessage] = useState({ type: '', text: '' });
+    const [certStatus, setCertStatus] = useState(null);
+    const [generatingCert, setGeneratingCert] = useState(false);
 
     // Fetch course details
     useEffect(() => {
         fetchCourse();
     }, [id]);
+
+    // Check certificate status when course is purchased
+    useEffect(() => {
+        if (isAuthenticated && course?.is_purchased) {
+            checkCertificateStatus();
+        }
+    }, [course?.is_purchased, isAuthenticated]);
+
+    // Check if user can get a certificate
+    const checkCertificateStatus = async () => {
+        try {
+            const response = await certificateAPI.check(id);
+            setCertStatus(response.data);
+        } catch (err) {
+            console.error('Failed to check certificate status:', err);
+        }
+    };
+
+    // Generate certificate
+    const handleGenerateCertificate = async () => {
+        setGeneratingCert(true);
+        try {
+            const response = await certificateAPI.generate(id);
+            setMessage({ type: 'success', text: response.data.message });
+            checkCertificateStatus(); // Refresh status
+        } catch (err) {
+            setMessage({
+                type: 'error',
+                text: err.response?.data?.message || 'Failed to generate certificate.'
+            });
+        } finally {
+            setGeneratingCert(false);
+        }
+    };
 
     const fetchCourse = async () => {
         try {
@@ -146,6 +182,61 @@ function CourseDetail() {
                                         <p style={{ marginTop: '0.5rem', color: 'var(--gray)' }}>
                                             You have full access to all lessons.
                                         </p>
+
+                                        {/* Certificate Section - only shown for purchased courses */}
+                                        {certStatus && (
+                                            <div style={{ marginTop: '1rem', padding: '1rem', background: 'white', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                                                {certStatus.has_certificate ? (
+                                                    // Already has certificate
+                                                    <div style={{ textAlign: 'center' }}>
+                                                        <span style={{ fontSize: '2rem' }}>🎓</span>
+                                                        <p style={{ fontWeight: 600, color: 'var(--success)', margin: '0.5rem 0' }}>
+                                                            Certificate Earned!
+                                                        </p>
+                                                        <p style={{ fontSize: '0.85rem', color: 'var(--gray)', fontFamily: 'monospace' }}>
+                                                            {certStatus.certificate?.certificate_code}
+                                                        </p>
+                                                        <Link to="/certificates" className="btn btn-primary btn-sm" style={{ marginTop: '0.5rem' }}>
+                                                            View Certificate
+                                                        </Link>
+                                                    </div>
+                                                ) : certStatus.is_completed ? (
+                                                    // Course completed, can generate certificate
+                                                    <div style={{ textAlign: 'center' }}>
+                                                        <span style={{ fontSize: '2rem' }}>🎉</span>
+                                                        <p style={{ fontWeight: 600, margin: '0.5rem 0' }}>
+                                                            Course Completed! Get your certificate:
+                                                        </p>
+                                                        <button
+                                                            className="btn btn-success"
+                                                            onClick={handleGenerateCertificate}
+                                                            disabled={generatingCert}
+                                                        >
+                                                            {generatingCert ? 'Generating...' : '🎓 Get Certificate'}
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    // Still in progress
+                                                    <div>
+                                                        <p style={{ fontSize: '0.9rem', marginBottom: '0.5rem' }}>
+                                                            📊 Progress: {certStatus.completed_lessons}/{certStatus.total_lessons} lessons completed
+                                                        </p>
+                                                        <div style={{ background: '#e2e8f0', borderRadius: '10px', height: '10px', overflow: 'hidden' }}>
+                                                            <div style={{
+                                                                background: 'var(--primary)',
+                                                                height: '100%',
+                                                                width: `${certStatus.total_lessons > 0 ? (certStatus.completed_lessons / certStatus.total_lessons) * 100 : 0}%`,
+                                                                borderRadius: '10px',
+                                                                transition: 'width 0.3s ease'
+                                                            }}></div>
+                                                        </div>
+                                                        <p style={{ fontSize: '0.8rem', color: 'var(--gray)', marginTop: '0.5rem' }}>
+                                                            Complete all lessons to earn your certificate! 🎓
+                                                        </p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
                                 ) : (
                                     <div>
