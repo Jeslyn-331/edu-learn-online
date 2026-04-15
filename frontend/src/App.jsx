@@ -16,6 +16,7 @@ import Dashboard from './pages/Dashboard';
 import InstructorDashboard from './pages/InstructorDashboard';
 import ManageCourse from './pages/ManageCourse';
 import Certificates from './pages/Certificates';
+import Analytics from './pages/Analytics';
 
 // ============================================================
 // Protected Route Component
@@ -74,6 +75,7 @@ function App() {
                 <Route path="/register" element={<Register />} />
                 <Route path="/courses" element={<Courses />} />
                 <Route path="/courses/:id" element={<CourseDetail />} />
+                <Route path="/analytics" element={<Analytics />} />
                 
                 {/* Protected routes (require login) */}
                 <Route path="/lessons/:id" element={

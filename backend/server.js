@@ -21,6 +21,7 @@ const purchaseRoutes = require('./routes/purchases');
 const progressRoutes = require('./routes/progress');
 const adminRoutes = require('./routes/admin');
 const certificateRoutes = require('./routes/certificates');
+const dashboardRoutes = require('./routes/dashboard');
 
 // Initialize Express app
 const app = express();
@@ -87,6 +88,9 @@ app.use('/api/admin', adminRoutes);
 
 // Certificate routes (generate, view, verify certificates)
 app.use('/api/certificates', certificateRoutes);
+
+// Dashboard routes (best-sellers analytics, platform stats)
+app.use('/api/dashboard', dashboardRoutes);
 
 // ============================================================
 // ERROR HANDLING

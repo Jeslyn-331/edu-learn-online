@@ -28,6 +28,7 @@ function Navbar() {
                 <div className="navbar-links">
                     {/* Always visible */}
                     <Link to="/courses">Courses</Link>
+                    <Link to="/analytics">📊 Analytics</Link>
 
                     {isAuthenticated ? (
                         <>

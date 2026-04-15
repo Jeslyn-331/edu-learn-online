@@ -109,6 +109,15 @@ export const certificateAPI = {
 };
 
 // ============================================================
+// DASHBOARD / ANALYTICS API CALLS
+// ============================================================
+export const dashboardAPI = {
+    getBestSellers: (limit = 10) => API.get(`/dashboard/best-sellers?limit=${limit}`),
+    getStats: () => API.get('/dashboard/stats'),
+    getRevenue: () => API.get('/dashboard/revenue'),
+};
+
+// ============================================================
 // ADMIN API CALLS
 // ============================================================
 export const adminAPI = {
