@@ -187,7 +187,7 @@ sudo systemctl start nginx
 2. Configure scaling:
    - **Minimum**: 1 instance
    - **Desired**: 1 instance
-   - **Maximum**: 4 instances
+   - **Maximum**: 3 instances
 
 **Step 4: Create Scaling Policies**
 
