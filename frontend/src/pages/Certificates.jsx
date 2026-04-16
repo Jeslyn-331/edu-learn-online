@@ -3,7 +3,7 @@
 // Shows all earned certificates + verify certificate feature
 // ============================================================
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { certificateAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -15,8 +15,6 @@ function Certificates() {
     const [verifyCode, setVerifyCode] = useState('');
     const [verifyResult, setVerifyResult] = useState(null);
     const [verifying, setVerifying] = useState(false);
-    const [selectedCert, setSelectedCert] = useState(null);
-    const certRef = useRef(null);
 
     // Fetch all certificates on mount
     useEffect(() => {
@@ -61,14 +59,6 @@ function Certificates() {
         });
     };
 
-    // Print / Download certificate (opens print dialog)
-    const handleDownload = (cert) => {
-        setSelectedCert(cert);
-        // Wait for state to update, then trigger print
-        setTimeout(() => {
-            window.print();
-        }, 300);
-    };
 
     if (loading) {
         return (
@@ -184,12 +174,6 @@ function Certificates() {
 
                                 <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
                                     <button 
-                                        className="btn btn-primary btn-sm"
-                                        onClick={() => handleDownload(cert)}
-                                    >
-                                        📥 Download
-                                    </button>
-                                    <button 
                                         className="btn btn-secondary btn-sm"
                                         onClick={() => {
                                             navigator.clipboard.writeText(cert.certificate_code);
@@ -205,75 +189,6 @@ function Certificates() {
                 </div>
             )}
 
-            {/* Printable Certificate (hidden, shown only when printing) */}
-            {selectedCert && (
-                <div className="print-certificate" ref={certRef} style={{ display: 'none' }}>
-                    <style>{`
-                        @media print {
-                            body * { visibility: hidden; }
-                            .print-certificate, .print-certificate * { 
-                                visibility: visible !important; 
-                                display: block !important;
-                            }
-                            .print-certificate {
-                                position: fixed;
-                                left: 0; top: 0;
-                                width: 100%; height: 100%;
-                                background: white;
-                                z-index: 9999;
-                            }
-                        }
-                    `}</style>
-                    <div style={{
-                        width: '100%', height: '100%',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        background: 'white', padding: '2rem'
-                    }}>
-                        <div style={{
-                            border: '3px solid #4f46e5',
-                            borderRadius: '12px',
-                            padding: '3rem',
-                            maxWidth: '700px',
-                            width: '100%',
-                            textAlign: 'center'
-                        }}>
-                            <div style={{ fontSize: '3rem', marginBottom: '0.5rem' }}>🎓</div>
-                            <h1 style={{ color: '#4f46e5', fontSize: '1.8rem', marginBottom: '0.25rem' }}>
-                                Certificate of Completion
-                            </h1>
-                            <p style={{ color: '#64748b', marginBottom: '2rem' }}>EduLearn Online Academy</p>
-                            
-                            <p style={{ color: '#64748b', fontSize: '1rem' }}>This is to certify that</p>
-                            <h2 style={{ color: '#1e293b', fontSize: '2rem', margin: '0.5rem 0', borderBottom: '2px solid #4f46e5', display: 'inline-block', padding: '0 1rem 0.25rem' }}>
-                                {selectedCert.user_name}
-                            </h2>
-                            
-                            <p style={{ color: '#64748b', fontSize: '1rem', marginTop: '1.5rem' }}>
-                                has successfully completed the course
-                            </p>
-                            <h3 style={{ color: '#4f46e5', fontSize: '1.5rem', margin: '0.5rem 0' }}>
-                                {selectedCert.course_title}
-                            </h3>
-                            
-                            <p style={{ color: '#64748b', marginTop: '1.5rem' }}>
-                                Instructor: <strong>{selectedCert.instructor_name}</strong>
-                            </p>
-                            <p style={{ color: '#64748b' }}>
-                                Date: <strong>{formatDate(selectedCert.issue_date)}</strong>
-                            </p>
-                            
-                            <div style={{ marginTop: '2rem', padding: '0.5rem', background: '#f1f5f9', borderRadius: '6px' }}>
-                                <p style={{ color: '#64748b', fontSize: '0.8rem', margin: 0 }}>
-                                    Certificate ID: <strong>{selectedCert.certificate_code}</strong>
-                                </p>
-                                <p style={{ color: '#94a3b8', fontSize: '0.7rem', margin: '0.25rem 0 0' }}>
-                                    Verify at: edulearn.com/verify
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     );
 }
