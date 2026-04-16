@@ -109,7 +109,4 @@ function App() {
     );
 }
 
-const helmet = require('helmet');
-app.use(helmet());
-
 export default App;
