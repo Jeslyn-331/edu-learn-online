@@ -8,6 +8,21 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { courseAPI, lessonAPI } from '../services/api';
 
+// Keep lesson URLs absolute before sending them to the API.
+const normalizeLessonUrl = (rawUrl) => {
+    const trimmedUrl = rawUrl.trim();
+
+    if (!trimmedUrl) {
+        return null;
+    }
+
+    if (/^https?:\/\//i.test(trimmedUrl)) {
+        return trimmedUrl;
+    }
+
+    return `https://${trimmedUrl}`;
+};
+
 function ManageCourse() {
     const { id } = useParams(); // If id exists, we're editing
     const navigate = useNavigate();
@@ -129,7 +144,7 @@ function ManageCourse() {
                 course_id: parseInt(id),
                 title: lessonTitle.trim(),
                 content: lessonContent.trim(),
-                video_url: lessonVideoUrl.trim() || null,
+                video_url: normalizeLessonUrl(lessonVideoUrl),
                 price: parseFloat(lessonPrice) || 0,
                 is_preview: lessonIsPreview
             };

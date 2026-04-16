@@ -13,6 +13,25 @@ const router = express.Router();
 const { pool } = require('../config/database');
 const { verifyToken, isInstructor, optionalAuth } = require('../middleware/auth');
 
+// Normalize lesson URLs so browsers always receive an absolute link.
+// This fixes common admin input like "www.example.com/video" without a protocol.
+const normalizeLessonUrl = (rawUrl) => {
+    if (rawUrl === undefined) {
+        return undefined;
+    }
+
+    const trimmedUrl = typeof rawUrl === 'string' ? rawUrl.trim() : '';
+    if (!trimmedUrl) {
+        return null;
+    }
+
+    if (/^https?:\/\//i.test(trimmedUrl)) {
+        return trimmedUrl;
+    }
+
+    return `https://${trimmedUrl}`;
+};
+
 // ============================================================
 // GET /api/lessons/course/:courseId
 // Get all lessons for a specific course
@@ -122,6 +141,7 @@ router.get('/:id', optionalAuth, async (req, res) => {
 router.post('/', verifyToken, isInstructor, async (req, res) => {
     try {
         const { course_id, title, content, video_url, price, lesson_order, is_preview } = req.body;
+        const normalizedVideoUrl = normalizeLessonUrl(video_url);
 
         // Validate required fields
         if (!course_id || !title) {
@@ -167,7 +187,7 @@ router.post('/', verifyToken, isInstructor, async (req, res) => {
         const [result] = await pool.query(
             `INSERT INTO lessons (course_id, title, content, video_url, price, lesson_order, is_preview) 
              VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [course_id, title, content || '', video_url || null, lessonPrice, order, is_preview || false]
+            [course_id, title, content || '', normalizedVideoUrl, lessonPrice, order, is_preview || false]
         );
 
         res.status(201).json({
@@ -177,7 +197,7 @@ router.post('/', verifyToken, isInstructor, async (req, res) => {
                 course_id: parseInt(course_id),
                 title,
                 content: content || '',
-                video_url: video_url || null,
+                video_url: normalizedVideoUrl,
                 price: lessonPrice,
                 lesson_order: order,
                 is_preview: is_preview || false
@@ -201,6 +221,7 @@ router.put('/:id', verifyToken, isInstructor, async (req, res) => {
     try {
         const lessonId = req.params.id;
         const { title, content, video_url, price, lesson_order, is_preview } = req.body;
+        const normalizedVideoUrl = normalizeLessonUrl(video_url);
 
         // Get lesson and verify ownership
         const [lessons] = await pool.query(`
@@ -230,7 +251,7 @@ router.put('/:id', verifyToken, isInstructor, async (req, res) => {
 
         if (title !== undefined) { updates.push('title = ?'); params.push(title); }
         if (content !== undefined) { updates.push('content = ?'); params.push(content); }
-        if (video_url !== undefined) { updates.push('video_url = ?'); params.push(video_url); }
+        if (video_url !== undefined) { updates.push('video_url = ?'); params.push(normalizedVideoUrl); }
         if (price !== undefined) { updates.push('price = ?'); params.push(parseFloat(price)); }
         if (lesson_order !== undefined) { updates.push('lesson_order = ?'); params.push(lesson_order); }
         if (is_preview !== undefined) { updates.push('is_preview = ?'); params.push(is_preview); }
