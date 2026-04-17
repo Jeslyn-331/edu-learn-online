@@ -64,7 +64,7 @@ function CourseDetail() {
             const response = await courseAPI.getById(id);
             setCourse(response.data.course);
         } catch (err) {
-            setMessage({ type: 'error', text: 'Failed to load course details.' });
+            setMessage({ type: 'error', text: err.response?.data?.message || 'Failed to load course details. Make sure the backend server is running.' });
         } finally {
             setLoading(false);
         }
@@ -140,9 +140,13 @@ function CourseDetail() {
     if (!course) {
         return (
             <div className="container">
+                {/* Show API error if one occurred, otherwise show "not found" */}
+                {message.text && (
+                    <div className={`alert alert-${message.type}`}>{message.text}</div>
+                )}
                 <div className="empty-state">
                     <h3>Course not found</h3>
-                    <p>The course you're looking for doesn't exist.</p>
+                    <p>The course you're looking for doesn't exist or could not be loaded.</p>
                     <Link to="/courses" className="btn btn-primary">Browse Courses</Link>
                 </div>
             </div>

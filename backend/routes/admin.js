@@ -96,7 +96,7 @@ router.get('/courses', async (req, res) => {
             SELECT c.*,
                    COUNT(DISTINCT e.enrollment_id) as student_count,
                    COUNT(DISTINCT l.lesson_id) as lesson_count,
-                   COALESCE(SUM(DISTINCT p.price), 0) as total_revenue
+                   COALESCE(SUM(p.price), 0) as total_revenue
             FROM courses c
             LEFT JOIN enrollments e ON c.course_id = e.course_id
             LEFT JOIN lessons l ON c.course_id = l.course_id

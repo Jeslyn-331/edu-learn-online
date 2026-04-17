@@ -66,7 +66,7 @@ function ManageCourse() {
             setIsPublished(course.is_published);
             setLessons(course.lessons || []);
         } catch (err) {
-            setMessage({ type: 'error', text: 'Failed to load course.' });
+            setMessage({ type: 'error', text: err.response?.data?.message || 'Failed to load course. Make sure the backend server is running.' });
         } finally {
             setLoading(false);
         }

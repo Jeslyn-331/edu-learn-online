@@ -15,6 +15,7 @@ const multer = require('multer');
 const router = express.Router();
 const { pool } = require('../config/database');
 const { verifyToken, isInstructor, optionalAuth } = require('../middleware/auth');
+const { isS3Enabled, uploadToS3, deleteFromS3, isS3Url } = require('../config/s3');
 
 const MAX_VIDEO_SIZE_BYTES = 50 * 1024 * 1024;
 const lessonUploadsDir = path.join(__dirname, '..', 'uploads', 'lessons');
@@ -88,6 +89,43 @@ const normalizeLessonUrl = (rawUrl) => {
 const parseBoolean = (value) => value === true || value === 'true' || value === 1 || value === '1';
 
 const toPublicUploadPath = (file) => file ? `/uploads/lessons/${file.filename}` : null;
+
+// Upload the multer-saved local file to S3 (if configured).
+// Returns the S3 URL, or falls back to the local path.
+const uploadVideoToStorage = async (file) => {
+    if (!file) return null;
+
+    const localPath = toPublicUploadPath(file);
+
+    // If S3 is configured, upload there and remove the local temp file
+    if (isS3Enabled()) {
+        try {
+            const s3Key = `lessons/${file.filename}`;
+            const absoluteLocal = path.join(lessonUploadsDir, file.filename);
+            const s3Url = await uploadToS3(absoluteLocal, s3Key, 'video/mp4');
+
+            // Remove local temp file after successful S3 upload
+            await fs.promises.unlink(absoluteLocal).catch(() => {});
+            return s3Url;
+        } catch (err) {
+            console.error('S3 upload failed, keeping local file:', err.message);
+            return localPath; // Fallback to local storage
+        }
+    }
+
+    return localPath;
+};
+
+// Delete a video from wherever it is stored (local or S3)
+const deleteVideo = async (videoPath) => {
+    if (!videoPath) return;
+
+    if (isS3Url(videoPath)) {
+        await deleteFromS3(videoPath);
+    } else {
+        await deleteLocalVideo(videoPath);
+    }
+};
 
 const deleteLocalVideo = async (videoPath) => {
     if (!videoPath || !videoPath.startsWith('/uploads/lessons/')) {
@@ -220,11 +258,12 @@ router.post('/', verifyToken, isInstructor, handleLessonUpload, async (req, res)
         } = req.body;
 
         const normalizedVideoUrl = normalizeLessonUrl(video_url);
-        const uploadedVideoPath = toPublicUploadPath(req.file);
+        // Upload to S3 if configured, otherwise keep local path
+        const uploadedVideoPath = await uploadVideoToStorage(req.file);
 
         if (!course_id || !title) {
             if (uploadedVideoPath) {
-                await deleteLocalVideo(uploadedVideoPath);
+                await deleteVideo(uploadedVideoPath);
             }
 
             return res.status(400).json({
@@ -234,7 +273,7 @@ router.post('/', verifyToken, isInstructor, handleLessonUpload, async (req, res)
         }
 
         if (normalizedVideoUrl && uploadedVideoPath) {
-            await deleteLocalVideo(uploadedVideoPath);
+            await deleteVideo(uploadedVideoPath);
             return res.status(400).json({
                 error: 'Invalid lesson media',
                 message: 'Please provide either a video URL or an MP4 upload, not both.'
@@ -255,7 +294,7 @@ router.post('/', verifyToken, isInstructor, handleLessonUpload, async (req, res)
 
         if (courses.length === 0) {
             if (uploadedVideoPath) {
-                await deleteLocalVideo(uploadedVideoPath);
+                await deleteVideo(uploadedVideoPath);
             }
 
             return res.status(404).json({
@@ -266,7 +305,7 @@ router.post('/', verifyToken, isInstructor, handleLessonUpload, async (req, res)
 
         if (courses[0].instructor_id !== req.user.user_id && req.user.role !== 'admin') {
             if (uploadedVideoPath) {
-                await deleteLocalVideo(uploadedVideoPath);
+                await deleteVideo(uploadedVideoPath);
             }
 
             return res.status(403).json({
@@ -319,7 +358,9 @@ router.post('/', verifyToken, isInstructor, handleLessonUpload, async (req, res)
         });
     } catch (error) {
         if (req.file) {
-            await deleteLocalVideo(toPublicUploadPath(req.file));
+            // Clean up: try local first, then S3 if applicable
+            const tempPath = toPublicUploadPath(req.file);
+            await deleteVideo(tempPath);
         }
 
         console.error('Create lesson error:', error);
@@ -380,11 +421,12 @@ router.put('/:id', verifyToken, isInstructor, handleLessonUpload, async (req, re
         }
 
         const normalizedVideoUrl = normalizeLessonUrl(video_url);
-        const uploadedVideoPath = toPublicUploadPath(req.file);
+        // Upload new file to S3 if configured, otherwise keep local
+        const uploadedVideoPath = await uploadVideoToStorage(req.file);
         const keepExistingVideoFile = parseBoolean(keep_existing_video_file);
 
         if (normalizedVideoUrl && uploadedVideoPath) {
-            await deleteLocalVideo(uploadedVideoPath);
+            await deleteVideo(uploadedVideoPath);
             return res.status(400).json({
                 error: 'Invalid lesson media',
                 message: 'Please provide either a video URL or an MP4 upload, not both.'
@@ -407,7 +449,7 @@ router.put('/:id', verifyToken, isInstructor, handleLessonUpload, async (req, re
 
         if (!nextVideoUrl && !nextVideoFile) {
             if (uploadedVideoPath) {
-                await deleteLocalVideo(uploadedVideoPath);
+                await deleteVideo(uploadedVideoPath);
             }
 
             return res.status(400).json({
@@ -442,9 +484,9 @@ router.put('/:id', verifyToken, isInstructor, handleLessonUpload, async (req, re
             ]
         );
 
-        // Remove the old local upload after the new database state is safely saved.
+        // Remove the old video (local or S3) after the new database state is safely saved.
         if (currentLesson.video_file && currentLesson.video_file !== nextLesson.video_file) {
-            await deleteLocalVideo(currentLesson.video_file);
+            await deleteVideo(currentLesson.video_file);
         }
 
         res.json({
@@ -458,7 +500,8 @@ router.put('/:id', verifyToken, isInstructor, handleLessonUpload, async (req, re
         });
     } catch (error) {
         if (req.file) {
-            await deleteLocalVideo(toPublicUploadPath(req.file));
+            const tempPath = toPublicUploadPath(req.file);
+            await deleteVideo(tempPath);
         }
 
         console.error('Update lesson error:', error);
@@ -501,7 +544,8 @@ router.delete('/:id', verifyToken, isInstructor, async (req, res) => {
         }
 
         await pool.query('DELETE FROM lessons WHERE lesson_id = ?', [lessonId]);
-        await deleteLocalVideo(lesson.video_file);
+        // Clean up the video file from local storage or S3
+        await deleteVideo(lesson.video_file);
 
         res.json({
             message: 'Lesson deleted successfully!',

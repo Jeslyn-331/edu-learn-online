@@ -117,12 +117,6 @@ function InstructorDashboard() {
                         </div>
                         <div className="stat-label">Total Earnings</div>
                     </div>
-                    <div className="stat-card">
-                        <div className="stat-value" style={{ color: 'var(--primary)' }}>
-                            ${dashboard.wallet_balance.toFixed(2)}
-                        </div>
-                        <div className="stat-label">Wallet Balance</div>
-                    </div>
                 </div>
             )}
 

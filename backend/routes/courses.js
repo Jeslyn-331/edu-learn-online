@@ -65,10 +65,19 @@ router.get('/', async (req, res) => {
 // GET /api/courses/:id
 // Get single course details with its lessons
 // Public access, but shows purchase status if logged in
+// Works on both local WAMP and AWS RDS
 // ============================================================
 router.get('/:id', optionalAuth, async (req, res) => {
     try {
         const courseId = req.params.id;
+
+        // Validate course ID is a valid number to prevent bad queries
+        if (!courseId || isNaN(courseId)) {
+            return res.status(400).json({
+                error: 'Invalid course ID',
+                message: 'Course ID must be a valid number.'
+            });
+        }
 
         // Get course details with instructor info
         const [courses] = await pool.query(`
@@ -92,11 +101,12 @@ router.get('/:id', optionalAuth, async (req, res) => {
         course.price = parseFloat(course.price);
 
         // Get lessons for this course
+        // Uses SELECT l.* so new columns are included automatically
         const [lessons] = await pool.query(`
-            SELECT lesson_id, title, content, video_url, video_file, price, lesson_order, is_preview
-            FROM lessons
-            WHERE course_id = ?
-            ORDER BY lesson_order ASC
+            SELECT l.*
+            FROM lessons l
+            WHERE l.course_id = ?
+            ORDER BY l.lesson_order ASC
         `, [courseId]);
 
         lessons.forEach(lesson => {
@@ -134,9 +144,11 @@ router.get('/:id', optionalAuth, async (req, res) => {
 
     } catch (error) {
         console.error('Get course details error:', error);
+        // Return actual error detail so frontend can show useful message
+        const detail = error.sqlMessage || error.message || 'Unknown error';
         res.status(500).json({
             error: 'Failed to fetch course',
-            message: 'An error occurred while fetching course details.'
+            message: `Failed to load course details: ${detail}`
         });
     }
 });
@@ -147,7 +159,7 @@ router.get('/:id', optionalAuth, async (req, res) => {
 // ============================================================
 router.post('/', verifyToken, isInstructor, async (req, res) => {
     try {
-        const { title, description, price, image_url, is_published } = req.body;
+        const { title, description, price, image_url, is_published, duration } = req.body;
 
         // Validate required fields
         if (!title) {
@@ -166,11 +178,14 @@ router.post('/', verifyToken, isInstructor, async (req, res) => {
             });
         }
 
+        // Parse duration (in hours, optional)
+        const courseDuration = duration ? parseInt(duration) : null;
+
         // Insert course into database
         const [result] = await pool.query(
-            `INSERT INTO courses (title, description, price, image_url, instructor_id, is_published) 
-             VALUES (?, ?, ?, ?, ?, ?)`,
-            [title, description || '', coursePrice, image_url || null, req.user.user_id, is_published || false]
+            `INSERT INTO courses (title, description, price, image_url, instructor_id, is_published, duration) 
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            [title, description || '', coursePrice, image_url || null, req.user.user_id, is_published || false, courseDuration]
         );
 
         res.status(201).json({
@@ -182,7 +197,8 @@ router.post('/', verifyToken, isInstructor, async (req, res) => {
                 price: coursePrice,
                 image_url: image_url || null,
                 instructor_id: req.user.user_id,
-                is_published: is_published || false
+                is_published: is_published || false,
+                duration: courseDuration
             }
         });
 
@@ -202,7 +218,7 @@ router.post('/', verifyToken, isInstructor, async (req, res) => {
 router.put('/:id', verifyToken, isInstructor, async (req, res) => {
     try {
         const courseId = req.params.id;
-        const { title, description, price, image_url, is_published } = req.body;
+        const { title, description, price, image_url, is_published, duration } = req.body;
 
         // Check if course exists and belongs to this instructor
         const [courses] = await pool.query(
@@ -234,6 +250,7 @@ router.put('/:id', verifyToken, isInstructor, async (req, res) => {
         if (price !== undefined) { updates.push('price = ?'); params.push(parseFloat(price)); }
         if (image_url !== undefined) { updates.push('image_url = ?'); params.push(image_url); }
         if (is_published !== undefined) { updates.push('is_published = ?'); params.push(is_published); }
+        if (duration !== undefined) { updates.push('duration = ?'); params.push(duration ? parseInt(duration) : null); }
 
         if (updates.length === 0) {
             return res.status(400).json({

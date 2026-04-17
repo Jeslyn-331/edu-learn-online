@@ -34,6 +34,7 @@ function Navbar() {
                         <>
                             {/* Logged-in user links */}
                             <Link to="/dashboard">My Learning</Link>
+                            <Link to="/history">📖 History</Link>
                             <Link to="/certificates">🎓 Certificates</Link>
                             <Link to="/wallet">
                                 💰 <span className="wallet-badge">${user?.wallet_balance?.toFixed(2) || '0.00'}</span>

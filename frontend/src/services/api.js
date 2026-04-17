@@ -2,13 +2,17 @@
 // API Service
 // Centralized HTTP client for all API calls
 // Uses axios with automatic token attachment
+// Base URL uses VITE_API_URL env var for AWS, falls back to '/api'
+// for local dev (Vite proxy forwards /api → backend at port 5000)
 // ============================================================
 
 import axios from 'axios';
 
 // Create axios instance with base URL
+// Local dev: '/api' (proxied by Vite to http://localhost:5000)
+// AWS prod:  set VITE_API_URL=https://your-api-domain.com/api
 const API = axios.create({
-    baseURL: '/api',  // Proxied to backend in development
+    baseURL: import.meta.env.VITE_API_URL || '/api',
     headers: {
         'Content-Type': 'application/json'
     }
@@ -84,7 +88,14 @@ export const lessonAPI = {
 export const walletAPI = {
     getBalance: () => API.get('/wallet/balance'),
     topUp: (amount) => API.post('/wallet/topup', { amount }),
-    getHistory: () => API.get('/wallet/history'),
+    getHistory: (from, to) => {
+        // Build query string with optional date filters
+        const params = new URLSearchParams();
+        if (from) params.append('from', from);
+        if (to) params.append('to', to);
+        const query = params.toString();
+        return API.get(`/wallet/history${query ? `?${query}` : ''}`);
+    },
 };
 
 // ============================================================

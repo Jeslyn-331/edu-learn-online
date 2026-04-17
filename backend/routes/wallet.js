@@ -128,30 +128,45 @@ router.post('/topup', async (req, res) => {
 // GET /api/wallet/history
 // Get wallet transaction history for the logged-in user
 // Shows all additions and deductions
+// Supports optional date filtering: ?from=YYYY-MM-DD&to=YYYY-MM-DD
 // ============================================================
 router.get('/history', async (req, res) => {
     try {
+        const { from, to } = req.query;
+
+        // Build date filter conditions
+        let dateFilter = '';
+        const dateParams = [];
+        if (from) {
+            dateFilter += ' AND created_at >= ?';
+            dateParams.push(from + ' 00:00:00');
+        }
+        if (to) {
+            dateFilter += ' AND created_at <= ?';
+            dateParams.push(to + ' 23:59:59');
+        }
+
         // Get wallet history (most recent first)
         const [history] = await pool.query(`
             SELECT wallet_id, amount, action, description, created_at
             FROM wallet_history
-            WHERE user_id = ?
+            WHERE user_id = ?${dateFilter}
             ORDER BY created_at DESC
             LIMIT 50
-        `, [req.user.user_id]);
+        `, [req.user.user_id, ...dateParams]);
 
         history.forEach(record => {
             record.amount = parseFloat(record.amount);
         });
 
-        // Get transaction history
+        // Get transaction history (same date filter)
         const [transactions] = await pool.query(`
             SELECT transaction_id, amount, type, description, created_at
             FROM transactions
-            WHERE user_id = ?
+            WHERE user_id = ?${dateFilter}
             ORDER BY created_at DESC
             LIMIT 50
-        `, [req.user.user_id]);
+        `, [req.user.user_id, ...dateParams]);
 
         transactions.forEach(record => {
             record.amount = parseFloat(record.amount);
