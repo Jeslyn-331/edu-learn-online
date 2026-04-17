@@ -17,6 +17,8 @@ import InstructorDashboard from './pages/InstructorDashboard';
 import ManageCourse from './pages/ManageCourse';
 import Certificates from './pages/Certificates';
 import Analytics from './pages/Analytics';
+import Profile from './pages/Profile';
+import History from './pages/History';
 
 // ============================================================
 // Protected Route Component
@@ -89,6 +91,12 @@ function App() {
                 } />
                 <Route path="/certificates" element={
                     <ProtectedRoute><Certificates /></ProtectedRoute>
+                } />
+                <Route path="/profile" element={
+                    <ProtectedRoute><Profile /></ProtectedRoute>
+                } />
+                <Route path="/history" element={
+                    <ProtectedRoute><History /></ProtectedRoute>
                 } />
                 
                 {/* Instructor-only routes */}

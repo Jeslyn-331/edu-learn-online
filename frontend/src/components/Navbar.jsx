@@ -45,7 +45,7 @@ function Navbar() {
                             )}
 
                             {/* User info and logout */}
-                            <span className="user-name">👤 {user?.name}</span>
+                            <Link to="/profile" className="user-name">👤 {user?.name}</Link>
                             <button onClick={handleLogout}>Logout</button>
                         </>
                     ) : (

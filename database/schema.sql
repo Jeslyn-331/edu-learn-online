@@ -60,7 +60,8 @@ CREATE TABLE IF NOT EXISTS lessons (
     course_id INT NOT NULL,
     title VARCHAR(200) NOT NULL,
     content TEXT,                                 -- Lesson text content
-    video_url VARCHAR(500),                      -- S3 URL for lesson video
+    video_url VARCHAR(500),                      -- YouTube/external lesson URL
+    video_file VARCHAR(500),                     -- Uploaded MP4 path or S3 file URL
     price DECIMAL(10, 2) NOT NULL DEFAULT 0.00,  -- Individual lesson price
     lesson_order INT DEFAULT 0,                  -- Order within the course
     is_preview BOOLEAN DEFAULT FALSE,            -- Free preview lesson
@@ -69,6 +70,7 @@ CREATE TABLE IF NOT EXISTS lessons (
     
     -- Foreign key: course_id references courses table
     FOREIGN KEY (course_id) REFERENCES courses(course_id) ON DELETE CASCADE,
+    CHECK (video_url IS NOT NULL OR video_file IS NOT NULL),
     INDEX idx_lessons_course (course_id),
     INDEX idx_lessons_order (lesson_order)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -224,19 +226,19 @@ INSERT INTO courses (title, description, price, instructor_id, is_published) VAL
 ('Cloud Computing with AWS', 'Learn to deploy applications on Amazon Web Services. Covers EC2, S3, RDS, and more.', 99.99, 2, TRUE);
 
 -- Insert sample lessons
-INSERT INTO lessons (course_id, title, content, video_url, price, lesson_order, is_preview) VALUES
+INSERT INTO lessons (course_id, title, content, video_url, video_file, price, lesson_order, is_preview) VALUES
 -- Web Development Course Lessons
-(1, 'What is HTML?', 'HTML stands for HyperText Markup Language. It is the standard markup language for creating web pages.', 'https://s3.amazonaws.com/edulearn/videos/html-intro.mp4', 9.99, 1, TRUE),
-(1, 'CSS Basics', 'CSS (Cascading Style Sheets) is used to style and layout web pages.', 'https://s3.amazonaws.com/edulearn/videos/css-basics.mp4', 9.99, 2, FALSE),
-(1, 'JavaScript Fundamentals', 'JavaScript is a programming language that adds interactivity to websites.', 'https://s3.amazonaws.com/edulearn/videos/js-fundamentals.mp4', 14.99, 3, FALSE),
+(1, 'What is HTML?', 'HTML stands for HyperText Markup Language. It is the standard markup language for creating web pages.', 'https://s3.amazonaws.com/edulearn/videos/html-intro.mp4', NULL, 9.99, 1, TRUE),
+(1, 'CSS Basics', 'CSS (Cascading Style Sheets) is used to style and layout web pages.', 'https://s3.amazonaws.com/edulearn/videos/css-basics.mp4', NULL, 9.99, 2, FALSE),
+(1, 'JavaScript Fundamentals', 'JavaScript is a programming language that adds interactivity to websites.', 'https://s3.amazonaws.com/edulearn/videos/js-fundamentals.mp4', NULL, 14.99, 3, FALSE),
 -- Python Course Lessons
-(2, 'Python Decorators', 'Decorators are a powerful feature in Python that allows you to modify functions.', 'https://s3.amazonaws.com/edulearn/videos/python-decorators.mp4', 14.99, 1, TRUE),
-(2, 'Generators and Iterators', 'Learn how to create memory-efficient sequences using generators.', 'https://s3.amazonaws.com/edulearn/videos/python-generators.mp4', 14.99, 2, FALSE),
-(2, 'Async Programming', 'Master asynchronous programming with asyncio in Python.', 'https://s3.amazonaws.com/edulearn/videos/python-async.mp4', 19.99, 3, FALSE),
+(2, 'Python Decorators', 'Decorators are a powerful feature in Python that allows you to modify functions.', 'https://s3.amazonaws.com/edulearn/videos/python-decorators.mp4', NULL, 14.99, 1, TRUE),
+(2, 'Generators and Iterators', 'Learn how to create memory-efficient sequences using generators.', 'https://s3.amazonaws.com/edulearn/videos/python-generators.mp4', NULL, 14.99, 2, FALSE),
+(2, 'Async Programming', 'Master asynchronous programming with asyncio in Python.', 'https://s3.amazonaws.com/edulearn/videos/python-async.mp4', NULL, 19.99, 3, FALSE),
 -- AWS Course Lessons
-(3, 'AWS Overview', 'Introduction to Amazon Web Services and cloud computing concepts.', 'https://s3.amazonaws.com/edulearn/videos/aws-overview.mp4', 14.99, 1, TRUE),
-(3, 'EC2 and Compute', 'Learn to launch and manage virtual servers with Amazon EC2.', 'https://s3.amazonaws.com/edulearn/videos/aws-ec2.mp4', 19.99, 2, FALSE),
-(3, 'S3 and Storage', 'Store and retrieve files using Amazon S3 object storage.', 'https://s3.amazonaws.com/edulearn/videos/aws-s3.mp4', 19.99, 3, FALSE);
+(3, 'AWS Overview', 'Introduction to Amazon Web Services and cloud computing concepts.', 'https://s3.amazonaws.com/edulearn/videos/aws-overview.mp4', NULL, 14.99, 1, TRUE),
+(3, 'EC2 and Compute', 'Learn to launch and manage virtual servers with Amazon EC2.', 'https://s3.amazonaws.com/edulearn/videos/aws-ec2.mp4', NULL, 19.99, 2, FALSE),
+(3, 'S3 and Storage', 'Store and retrieve files using Amazon S3 object storage.', 'https://s3.amazonaws.com/edulearn/videos/aws-s3.mp4', NULL, 19.99, 3, FALSE);
 
 -- ============================================================
 -- DATABASE RELATIONSHIP SUMMARY

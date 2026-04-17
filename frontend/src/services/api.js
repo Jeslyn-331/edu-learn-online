@@ -20,6 +20,12 @@ API.interceptors.request.use((config) => {
     if (token) {
         config.headers.Authorization = `Bearer ${token}`;
     }
+
+    // Let the browser set the multipart boundary for file uploads automatically.
+    if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
+        delete config.headers['Content-Type'];
+    }
+
     return config;
 });
 
@@ -46,6 +52,8 @@ export const authAPI = {
     register: (data) => API.post('/auth/register', data),
     login: (data) => API.post('/auth/login', data),
     getProfile: () => API.get('/auth/me'),
+    updateProfile: (data) => API.put('/auth/profile', data),
+    changePassword: (data) => API.put('/auth/password', data),
 };
 
 // ============================================================
@@ -95,6 +103,7 @@ export const progressAPI = {
     getCourseProgress: (courseId) => API.get(`/progress/course/${courseId}`),
     updateProgress: (lessonId, status) => API.post(`/progress/${lessonId}`, { status }),
     getStats: () => API.get('/progress/stats'),
+    getAllProgress: () => API.get('/progress/all'),
 };
 
 // ============================================================

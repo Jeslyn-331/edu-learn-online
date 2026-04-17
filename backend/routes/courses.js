@@ -93,7 +93,7 @@ router.get('/:id', optionalAuth, async (req, res) => {
 
         // Get lessons for this course
         const [lessons] = await pool.query(`
-            SELECT lesson_id, title, content, video_url, price, lesson_order, is_preview
+            SELECT lesson_id, title, content, video_url, video_file, price, lesson_order, is_preview
             FROM lessons
             WHERE course_id = ?
             ORDER BY lesson_order ASC

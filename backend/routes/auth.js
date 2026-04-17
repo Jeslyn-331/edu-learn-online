@@ -215,4 +215,142 @@ router.get('/me', verifyToken, async (req, res) => {
     }
 });
 
+// ============================================================
+// PUT /api/auth/profile
+// Update user profile (name and email)
+// Requires: JWT token in Authorization header
+// ============================================================
+router.put('/profile', verifyToken, async (req, res) => {
+    try {
+        const { name, email } = req.body;
+
+        // Validate required fields
+        if (!name || !email) {
+            return res.status(400).json({
+                error: 'Missing fields',
+                message: 'Name and email are required.'
+            });
+        }
+
+        // Validate email format
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+            return res.status(400).json({
+                error: 'Invalid email',
+                message: 'Please provide a valid email address.'
+            });
+        }
+
+        // Check if email is already taken by another user
+        const [existingUsers] = await pool.query(
+            'SELECT user_id FROM users WHERE email = ? AND user_id != ?',
+            [email, req.user.user_id]
+        );
+
+        if (existingUsers.length > 0) {
+            return res.status(409).json({
+                error: 'Email exists',
+                message: 'This email is already in use by another account.'
+            });
+        }
+
+        // Update user profile
+        await pool.query(
+            'UPDATE users SET name = ?, email = ? WHERE user_id = ?',
+            [name, email, req.user.user_id]
+        );
+
+        // Get updated user data
+        const [users] = await pool.query(
+            'SELECT user_id, name, email, role, wallet_balance FROM users WHERE user_id = ?',
+            [req.user.user_id]
+        );
+
+        const user = users[0];
+        user.wallet_balance = parseFloat(user.wallet_balance);
+
+        res.json({
+            message: 'Profile updated successfully!',
+            user
+        });
+
+    } catch (error) {
+        console.error('Update profile error:', error);
+        res.status(500).json({
+            error: 'Failed to update profile',
+            message: 'An error occurred while updating your profile.'
+        });
+    }
+});
+
+// ============================================================
+// PUT /api/auth/password
+// Change user password
+// Requires: JWT token in Authorization header
+// ============================================================
+router.put('/password', verifyToken, async (req, res) => {
+    try {
+        const { currentPassword, newPassword } = req.body;
+
+        // Validate required fields
+        if (!currentPassword || !newPassword) {
+            return res.status(400).json({
+                error: 'Missing fields',
+                message: 'Current password and new password are required.'
+            });
+        }
+
+        // Validate new password length
+        if (newPassword.length < 6) {
+            return res.status(400).json({
+                error: 'Weak password',
+                message: 'New password must be at least 6 characters long.'
+            });
+        }
+
+        // Get current user with password
+        const [users] = await pool.query(
+            'SELECT password FROM users WHERE user_id = ?',
+            [req.user.user_id]
+        );
+
+        if (users.length === 0) {
+            return res.status(404).json({
+                error: 'User not found',
+                message: 'User account no longer exists.'
+            });
+        }
+
+        // Verify current password
+        const isPasswordValid = await bcrypt.compare(currentPassword, users[0].password);
+
+        if (!isPasswordValid) {
+            return res.status(401).json({
+                error: 'Invalid password',
+                message: 'Current password is incorrect.'
+            });
+        }
+
+        // Hash new password
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+        // Update password
+        await pool.query(
+            'UPDATE users SET password = ? WHERE user_id = ?',
+            [hashedPassword, req.user.user_id]
+        );
+
+        res.json({
+            message: 'Password changed successfully!'
+        });
+
+    } catch (error) {
+        console.error('Change password error:', error);
+        res.status(500).json({
+            error: 'Failed to change password',
+            message: 'An error occurred while changing your password.'
+        });
+    }
+});
+
 module.exports = router;

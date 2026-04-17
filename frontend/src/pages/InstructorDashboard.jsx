@@ -5,7 +5,7 @@
 
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { adminAPI } from '../services/api';
+import { adminAPI, dashboardAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
 function InstructorDashboard() {
@@ -14,6 +14,7 @@ function InstructorDashboard() {
     const [courses, setCourses] = useState([]);
     const [students, setStudents] = useState([]);
     const [earnings, setEarnings] = useState(null);
+    const [bestSellers, setBestSellers] = useState([]);
     const [activeTab, setActiveTab] = useState('overview');
     const [withdrawAmount, setWithdrawAmount] = useState('');
     const [loading, setLoading] = useState(true);
@@ -27,16 +28,18 @@ function InstructorDashboard() {
     const fetchData = async () => {
         try {
             setLoading(true);
-            const [dashRes, coursesRes, studentsRes, earningsRes] = await Promise.all([
+            const [dashRes, coursesRes, studentsRes, earningsRes, bestSellersRes] = await Promise.all([
                 adminAPI.getDashboard(),
                 adminAPI.getCourses(),
                 adminAPI.getStudents(),
-                adminAPI.getEarnings()
+                adminAPI.getEarnings(),
+                dashboardAPI.getBestSellers(5)
             ]);
             setDashboard(dashRes.data.dashboard);
             setCourses(coursesRes.data.courses);
             setStudents(studentsRes.data.students);
             setEarnings(earningsRes.data);
+            setBestSellers(bestSellersRes.data.best_sellers || []);
         } catch (err) {
             setMessage({ type: 'error', text: 'Failed to load dashboard data.' });
         } finally {
@@ -124,14 +127,14 @@ function InstructorDashboard() {
             )}
 
             {/* Tab Navigation */}
-            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem' }}>
-                {['overview', 'courses', 'students', 'earnings'].map(tab => (
+            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+                {['overview', 'courses', 'students', 'earnings', 'best-sellers'].map(tab => (
                     <button
                         key={tab}
                         className={`btn ${activeTab === tab ? 'btn-primary' : 'btn-secondary'}`}
                         onClick={() => setActiveTab(tab)}
                     >
-                        {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                        {tab === 'best-sellers' ? 'Best Sellers' : tab.charAt(0).toUpperCase() + tab.slice(1)}
                     </button>
                 ))}
             </div>
@@ -272,6 +275,61 @@ function InstructorDashboard() {
                                                 <td>{student.email}</td>
                                                 <td>{student.course_title}</td>
                                                 <td>{formatDate(student.enrolled_at)}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* Best Sellers Tab */}
+            {activeTab === 'best-sellers' && (
+                <div className="card">
+                    <div className="card-body">
+                        <h3 style={{ marginBottom: '1rem' }}>🏆 Best-Selling Courses (Platform-Wide)</h3>
+                        <p style={{ color: 'var(--gray)', marginBottom: '1.5rem' }}>
+                            Top-performing courses across the entire platform
+                        </p>
+                        {bestSellers.length === 0 ? (
+                            <div className="empty-state">
+                                <p>No sales data available yet.</p>
+                            </div>
+                        ) : (
+                            <div className="table-container">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Rank</th>
+                                            <th>Course</th>
+                                            <th>Instructor</th>
+                                            <th>Price</th>
+                                            <th>Sales</th>
+                                            <th>Revenue</th>
+                                            <th>Students</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {bestSellers.map((course, index) => (
+                                            <tr key={course.course_id}>
+                                                <td>
+                                                    <strong style={{ 
+                                                        fontSize: '1.2rem',
+                                                        color: index === 0 ? '#FFD700' : index === 1 ? '#C0C0C0' : index === 2 ? '#CD7F32' : 'var(--gray)'
+                                                    }}>
+                                                        #{index + 1}
+                                                    </strong>
+                                                </td>
+                                                <td><strong>{course.title}</strong></td>
+                                                <td>{course.instructor_name}</td>
+                                                <td>${course.course_price.toFixed(2)}</td>
+                                                <td>{course.total_sales}</td>
+                                                <td style={{ color: 'var(--success)', fontWeight: 600 }}>
+                                                    ${course.total_revenue.toFixed(2)}
+                                                </td>
+                                                <td>{course.total_students}</td>
                                             </tr>
                                         ))}
                                     </tbody>

@@ -15,6 +15,7 @@ function Certificates() {
     const [verifyCode, setVerifyCode] = useState('');
     const [verifyResult, setVerifyResult] = useState(null);
     const [verifying, setVerifying] = useState(false);
+    const [copyMessage, setCopyMessage] = useState('');
 
     // Fetch all certificates on mount
     useEffect(() => {
@@ -175,12 +176,17 @@ function Certificates() {
                                 <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
                                     <button 
                                         className="btn btn-secondary btn-sm"
-                                        onClick={() => {
-                                            navigator.clipboard.writeText(cert.certificate_code);
-                                            alert('Certificate code copied!');
+                                        onClick={async () => {
+                                            try {
+                                                await navigator.clipboard.writeText(cert.certificate_code);
+                                                setCopyMessage(cert.certificate_id);
+                                                setTimeout(() => setCopyMessage(''), 2000);
+                                            } catch (err) {
+                                                alert('Failed to copy. Please copy manually: ' + cert.certificate_code);
+                                            }
                                         }}
                                     >
-                                        📋 Copy Code
+                                        📋 {copyMessage === cert.certificate_id ? '✓ Copied!' : 'Copy Code'}
                                     </button>
                                 </div>
                             </div>

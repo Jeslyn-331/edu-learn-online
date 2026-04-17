@@ -9,12 +9,65 @@
 // ============================================================
 
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
+const multer = require('multer');
 const router = express.Router();
 const { pool } = require('../config/database');
 const { verifyToken, isInstructor, optionalAuth } = require('../middleware/auth');
 
+const MAX_VIDEO_SIZE_BYTES = 50 * 1024 * 1024;
+const lessonUploadsDir = path.join(__dirname, '..', 'uploads', 'lessons');
+
+// Make sure the local uploads directory exists before saving files.
+fs.mkdirSync(lessonUploadsDir, { recursive: true });
+
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => cb(null, lessonUploadsDir),
+    filename: (req, file, cb) => {
+        const safeName = file.originalname.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9._-]/g, '');
+        cb(null, `${Date.now()}-${safeName}`);
+    }
+});
+
+const uploadLessonVideo = multer({
+    storage,
+    limits: {
+        fileSize: MAX_VIDEO_SIZE_BYTES
+    },
+    fileFilter: (req, file, cb) => {
+        const isMp4Mime = file.mimetype === 'video/mp4';
+        const isMp4Extension = path.extname(file.originalname).toLowerCase() === '.mp4';
+
+        if (!isMp4Mime || !isMp4Extension) {
+            return cb(new Error('Only MP4 video files are allowed.'));
+        }
+
+        cb(null, true);
+    }
+}).single('video_file');
+
+const handleLessonUpload = (req, res, next) => {
+    uploadLessonVideo(req, res, (error) => {
+        if (!error) {
+            return next();
+        }
+
+        if (error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE') {
+            return res.status(400).json({
+                error: 'File too large',
+                message: 'Lesson video must be 50MB or smaller.'
+            });
+        }
+
+        return res.status(400).json({
+            error: 'Invalid upload',
+            message: error.message || 'Lesson video upload failed.'
+        });
+    });
+};
+
 // Normalize lesson URLs so browsers always receive an absolute link.
-// This fixes common admin input like "www.example.com/video" without a protocol.
 const normalizeLessonUrl = (rawUrl) => {
     if (rawUrl === undefined) {
         return undefined;
@@ -30,6 +83,27 @@ const normalizeLessonUrl = (rawUrl) => {
     }
 
     return `https://${trimmedUrl}`;
+};
+
+const parseBoolean = (value) => value === true || value === 'true' || value === 1 || value === '1';
+
+const toPublicUploadPath = (file) => file ? `/uploads/lessons/${file.filename}` : null;
+
+const deleteLocalVideo = async (videoPath) => {
+    if (!videoPath || !videoPath.startsWith('/uploads/lessons/')) {
+        return;
+    }
+
+    const absolutePath = path.join(__dirname, '..', videoPath.replace(/^\//, ''));
+
+    try {
+        await fs.promises.unlink(absolutePath);
+    } catch (error) {
+        // Ignore missing-file errors so cleanup never blocks a request.
+        if (error.code !== 'ENOENT') {
+            console.error('Failed to delete old lesson video:', error.message);
+        }
+    }
 };
 
 // ============================================================
@@ -48,12 +122,11 @@ router.get('/course/:courseId', async (req, res) => {
             ORDER BY l.lesson_order ASC
         `, [courseId]);
 
-        lessons.forEach(lesson => {
+        lessons.forEach((lesson) => {
             lesson.price = parseFloat(lesson.price);
         });
 
         res.json({ lessons });
-
     } catch (error) {
         console.error('Get lessons error:', error);
         res.status(500).json({
@@ -72,7 +145,6 @@ router.get('/:id', optionalAuth, async (req, res) => {
     try {
         const lessonId = req.params.id;
 
-        // Get lesson with course info
         const [lessons] = await pool.query(`
             SELECT l.*, c.title as course_title, c.instructor_id, c.course_id
             FROM lessons l
@@ -90,31 +162,28 @@ router.get('/:id', optionalAuth, async (req, res) => {
         const lesson = lessons[0];
         lesson.price = parseFloat(lesson.price);
 
-        // Check access: preview lessons are always accessible
         let hasAccess = lesson.is_preview;
 
         if (req.user && !hasAccess) {
-            // Check if user purchased this specific lesson
             const [lessonPurchase] = await pool.query(
                 'SELECT purchase_id FROM purchases WHERE user_id = ? AND lesson_id = ?',
                 [req.user.user_id, lessonId]
             );
 
-            // Check if user purchased the full course
             const [coursePurchase] = await pool.query(
                 'SELECT purchase_id FROM purchases WHERE user_id = ? AND course_id = ?',
                 [req.user.user_id, lesson.course_id]
             );
 
-            // Check if user is the instructor
-            hasAccess = lessonPurchase.length > 0 || 
-                       coursePurchase.length > 0 || 
-                       lesson.instructor_id === req.user.user_id;
+            hasAccess = lessonPurchase.length > 0 ||
+                coursePurchase.length > 0 ||
+                lesson.instructor_id === req.user.user_id;
         }
 
-        // If no access, hide video URL and full content
+        // Hide both media sources when the learner does not have access.
         if (!hasAccess) {
             lesson.video_url = null;
+            lesson.video_file = null;
             lesson.content = lesson.content ? lesson.content.substring(0, 100) + '...' : null;
         }
 
@@ -124,7 +193,6 @@ router.get('/:id', optionalAuth, async (req, res) => {
                 has_access: hasAccess
             }
         });
-
     } catch (error) {
         console.error('Get lesson error:', error);
         res.status(500).json({
@@ -137,27 +205,59 @@ router.get('/:id', optionalAuth, async (req, res) => {
 // ============================================================
 // POST /api/lessons
 // Create a new lesson (instructor only)
+// Accepts either a video URL or an uploaded MP4 file
 // ============================================================
-router.post('/', verifyToken, isInstructor, async (req, res) => {
+router.post('/', verifyToken, isInstructor, handleLessonUpload, async (req, res) => {
     try {
-        const { course_id, title, content, video_url, price, lesson_order, is_preview } = req.body;
-        const normalizedVideoUrl = normalizeLessonUrl(video_url);
+        const {
+            course_id,
+            title,
+            content,
+            video_url,
+            price,
+            lesson_order,
+            is_preview
+        } = req.body;
 
-        // Validate required fields
+        const normalizedVideoUrl = normalizeLessonUrl(video_url);
+        const uploadedVideoPath = toPublicUploadPath(req.file);
+
         if (!course_id || !title) {
+            if (uploadedVideoPath) {
+                await deleteLocalVideo(uploadedVideoPath);
+            }
+
             return res.status(400).json({
                 error: 'Missing fields',
                 message: 'Course ID and lesson title are required.'
             });
         }
 
-        // Verify the course belongs to this instructor
+        if (normalizedVideoUrl && uploadedVideoPath) {
+            await deleteLocalVideo(uploadedVideoPath);
+            return res.status(400).json({
+                error: 'Invalid lesson media',
+                message: 'Please provide either a video URL or an MP4 upload, not both.'
+            });
+        }
+
+        if (!normalizedVideoUrl && !uploadedVideoPath) {
+            return res.status(400).json({
+                error: 'Missing video',
+                message: 'Please provide a video URL or upload an MP4 file.'
+            });
+        }
+
         const [courses] = await pool.query(
             'SELECT instructor_id FROM courses WHERE course_id = ?',
             [course_id]
         );
 
         if (courses.length === 0) {
+            if (uploadedVideoPath) {
+                await deleteLocalVideo(uploadedVideoPath);
+            }
+
             return res.status(404).json({
                 error: 'Course not found',
                 message: 'The specified course does not exist.'
@@ -165,13 +265,16 @@ router.post('/', verifyToken, isInstructor, async (req, res) => {
         }
 
         if (courses[0].instructor_id !== req.user.user_id && req.user.role !== 'admin') {
+            if (uploadedVideoPath) {
+                await deleteLocalVideo(uploadedVideoPath);
+            }
+
             return res.status(403).json({
                 error: 'Access denied',
                 message: 'You can only add lessons to your own courses.'
             });
         }
 
-        // Get the next lesson order if not provided
         let order = lesson_order;
         if (!order) {
             const [maxOrder] = await pool.query(
@@ -182,12 +285,22 @@ router.post('/', verifyToken, isInstructor, async (req, res) => {
         }
 
         const lessonPrice = parseFloat(price) || 0;
+        const previewValue = parseBoolean(is_preview);
 
-        // Insert lesson
         const [result] = await pool.query(
-            `INSERT INTO lessons (course_id, title, content, video_url, price, lesson_order, is_preview) 
-             VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [course_id, title, content || '', normalizedVideoUrl, lessonPrice, order, is_preview || false]
+            `INSERT INTO lessons (
+                course_id, title, content, video_url, video_file, price, lesson_order, is_preview
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+                parseInt(course_id),
+                title,
+                content || '',
+                normalizedVideoUrl,
+                uploadedVideoPath,
+                lessonPrice,
+                parseInt(order),
+                previewValue
+            ]
         );
 
         res.status(201).json({
@@ -198,13 +311,17 @@ router.post('/', verifyToken, isInstructor, async (req, res) => {
                 title,
                 content: content || '',
                 video_url: normalizedVideoUrl,
+                video_file: uploadedVideoPath,
                 price: lessonPrice,
-                lesson_order: order,
-                is_preview: is_preview || false
+                lesson_order: parseInt(order),
+                is_preview: previewValue
             }
         });
-
     } catch (error) {
+        if (req.file) {
+            await deleteLocalVideo(toPublicUploadPath(req.file));
+        }
+
         console.error('Create lesson error:', error);
         res.status(500).json({
             error: 'Failed to create lesson',
@@ -216,73 +333,134 @@ router.post('/', verifyToken, isInstructor, async (req, res) => {
 // ============================================================
 // PUT /api/lessons/:id
 // Update an existing lesson (owner instructor only)
+// Supports switching between URL video and uploaded MP4
 // ============================================================
-router.put('/:id', verifyToken, isInstructor, async (req, res) => {
+router.put('/:id', verifyToken, isInstructor, handleLessonUpload, async (req, res) => {
     try {
         const lessonId = req.params.id;
-        const { title, content, video_url, price, lesson_order, is_preview } = req.body;
-        const normalizedVideoUrl = normalizeLessonUrl(video_url);
+        const {
+            title,
+            content,
+            video_url,
+            price,
+            lesson_order,
+            is_preview,
+            keep_existing_video_file
+        } = req.body;
 
-        // Get lesson and verify ownership
         const [lessons] = await pool.query(`
-            SELECT l.*, c.instructor_id 
-            FROM lessons l 
-            JOIN courses c ON l.course_id = c.course_id 
+            SELECT l.*, c.instructor_id
+            FROM lessons l
+            JOIN courses c ON l.course_id = c.course_id
             WHERE l.lesson_id = ?
         `, [lessonId]);
 
         if (lessons.length === 0) {
+            if (req.file) {
+                await deleteLocalVideo(toPublicUploadPath(req.file));
+            }
+
             return res.status(404).json({
                 error: 'Lesson not found',
                 message: 'The requested lesson does not exist.'
             });
         }
 
-        if (lessons[0].instructor_id !== req.user.user_id && req.user.role !== 'admin') {
+        const currentLesson = lessons[0];
+
+        if (currentLesson.instructor_id !== req.user.user_id && req.user.role !== 'admin') {
+            if (req.file) {
+                await deleteLocalVideo(toPublicUploadPath(req.file));
+            }
+
             return res.status(403).json({
                 error: 'Access denied',
                 message: 'You can only update lessons in your own courses.'
             });
         }
 
-        // Build update query
-        const updates = [];
-        const params = [];
+        const normalizedVideoUrl = normalizeLessonUrl(video_url);
+        const uploadedVideoPath = toPublicUploadPath(req.file);
+        const keepExistingVideoFile = parseBoolean(keep_existing_video_file);
 
-        if (title !== undefined) { updates.push('title = ?'); params.push(title); }
-        if (content !== undefined) { updates.push('content = ?'); params.push(content); }
-        if (video_url !== undefined) { updates.push('video_url = ?'); params.push(normalizedVideoUrl); }
-        if (price !== undefined) { updates.push('price = ?'); params.push(parseFloat(price)); }
-        if (lesson_order !== undefined) { updates.push('lesson_order = ?'); params.push(lesson_order); }
-        if (is_preview !== undefined) { updates.push('is_preview = ?'); params.push(is_preview); }
-
-        if (updates.length === 0) {
+        if (normalizedVideoUrl && uploadedVideoPath) {
+            await deleteLocalVideo(uploadedVideoPath);
             return res.status(400).json({
-                error: 'No updates',
-                message: 'No fields to update were provided.'
+                error: 'Invalid lesson media',
+                message: 'Please provide either a video URL or an MP4 upload, not both.'
             });
         }
 
-        params.push(lessonId);
+        let nextVideoUrl = currentLesson.video_url;
+        let nextVideoFile = currentLesson.video_file;
+
+        if (uploadedVideoPath) {
+            nextVideoUrl = null;
+            nextVideoFile = uploadedVideoPath;
+        } else if (normalizedVideoUrl !== undefined) {
+            nextVideoUrl = normalizedVideoUrl;
+            nextVideoFile = normalizedVideoUrl ? null : (keepExistingVideoFile ? currentLesson.video_file : null);
+        } else if (keepExistingVideoFile) {
+            nextVideoUrl = null;
+            nextVideoFile = currentLesson.video_file;
+        }
+
+        if (!nextVideoUrl && !nextVideoFile) {
+            if (uploadedVideoPath) {
+                await deleteLocalVideo(uploadedVideoPath);
+            }
+
+            return res.status(400).json({
+                error: 'Missing video',
+                message: 'Please provide a video URL or upload an MP4 file.'
+            });
+        }
+
+        const nextLesson = {
+            title: title !== undefined ? title : currentLesson.title,
+            content: content !== undefined ? content : currentLesson.content,
+            video_url: nextVideoUrl,
+            video_file: nextVideoFile,
+            price: price !== undefined ? (parseFloat(price) || 0) : parseFloat(currentLesson.price),
+            lesson_order: lesson_order !== undefined ? parseInt(lesson_order) : currentLesson.lesson_order,
+            is_preview: is_preview !== undefined ? parseBoolean(is_preview) : currentLesson.is_preview
+        };
+
         await pool.query(
-            `UPDATE lessons SET ${updates.join(', ')} WHERE lesson_id = ?`,
-            params
+            `UPDATE lessons
+             SET title = ?, content = ?, video_url = ?, video_file = ?, price = ?, lesson_order = ?, is_preview = ?
+             WHERE lesson_id = ?`,
+            [
+                nextLesson.title,
+                nextLesson.content,
+                nextLesson.video_url,
+                nextLesson.video_file,
+                nextLesson.price,
+                nextLesson.lesson_order,
+                nextLesson.is_preview,
+                lessonId
+            ]
         );
 
-        // Fetch updated lesson
-        const [updatedLesson] = await pool.query(
-            'SELECT * FROM lessons WHERE lesson_id = ?',
-            [lessonId]
-        );
-
-        updatedLesson[0].price = parseFloat(updatedLesson[0].price);
+        // Remove the old local upload after the new database state is safely saved.
+        if (currentLesson.video_file && currentLesson.video_file !== nextLesson.video_file) {
+            await deleteLocalVideo(currentLesson.video_file);
+        }
 
         res.json({
             message: 'Lesson updated successfully!',
-            lesson: updatedLesson[0]
+            lesson: {
+                ...currentLesson,
+                ...nextLesson,
+                lesson_id: parseInt(lessonId),
+                price: nextLesson.price
+            }
         });
-
     } catch (error) {
+        if (req.file) {
+            await deleteLocalVideo(toPublicUploadPath(req.file));
+        }
+
         console.error('Update lesson error:', error);
         res.status(500).json({
             error: 'Failed to update lesson',
@@ -299,11 +477,10 @@ router.delete('/:id', verifyToken, isInstructor, async (req, res) => {
     try {
         const lessonId = req.params.id;
 
-        // Get lesson and verify ownership
         const [lessons] = await pool.query(`
-            SELECT l.*, c.instructor_id 
-            FROM lessons l 
-            JOIN courses c ON l.course_id = c.course_id 
+            SELECT l.*, c.instructor_id
+            FROM lessons l
+            JOIN courses c ON l.course_id = c.course_id
             WHERE l.lesson_id = ?
         `, [lessonId]);
 
@@ -314,7 +491,9 @@ router.delete('/:id', verifyToken, isInstructor, async (req, res) => {
             });
         }
 
-        if (lessons[0].instructor_id !== req.user.user_id && req.user.role !== 'admin') {
+        const lesson = lessons[0];
+
+        if (lesson.instructor_id !== req.user.user_id && req.user.role !== 'admin') {
             return res.status(403).json({
                 error: 'Access denied',
                 message: 'You can only delete lessons in your own courses.'
@@ -322,12 +501,12 @@ router.delete('/:id', verifyToken, isInstructor, async (req, res) => {
         }
 
         await pool.query('DELETE FROM lessons WHERE lesson_id = ?', [lessonId]);
+        await deleteLocalVideo(lesson.video_file);
 
         res.json({
             message: 'Lesson deleted successfully!',
             lesson_id: parseInt(lessonId)
         });
-
     } catch (error) {
         console.error('Delete lesson error:', error);
         res.status(500).json({

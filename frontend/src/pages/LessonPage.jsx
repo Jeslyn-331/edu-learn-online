@@ -7,8 +7,7 @@ import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { lessonAPI, progressAPI } from '../services/api';
 
-// Detect the type of lesson video URL so we can render the right player.
-const getLessonVideoMeta = (videoUrl) => {
+const getVideoUrlMeta = (videoUrl) => {
     if (!videoUrl) {
         return {
             normalizedUrl: '',
@@ -36,7 +35,6 @@ const getLessonVideoMeta = (videoUrl) => {
     const host = parsedUrl.hostname.toLowerCase().replace(/^www\./, '');
     let embedUrl = '';
 
-    // Convert common YouTube URL formats into the iframe embed URL.
     if (host === 'youtube.com' || host === 'm.youtube.com') {
         const videoId = parsedUrl.searchParams.get('v');
         if (videoId) {
@@ -70,7 +68,6 @@ function LessonPage() {
     const [loading, setLoading] = useState(true);
     const [message, setMessage] = useState({ type: '', text: '' });
 
-    // Fetch lesson details
     useEffect(() => {
         fetchLesson();
     }, [id]);
@@ -87,7 +84,6 @@ function LessonPage() {
         }
     };
 
-    // Update progress when the learner starts or completes a lesson.
     const handleProgress = async (status) => {
         try {
             await progressAPI.updateProgress(id, status);
@@ -119,7 +115,7 @@ function LessonPage() {
         );
     }
 
-    const { normalizedUrl, isDirectVideoFile, embedUrl, isEmbeddable } = getLessonVideoMeta(lesson.video_url);
+    const { normalizedUrl, isDirectVideoFile, embedUrl, isEmbeddable } = getVideoUrlMeta(lesson.video_url);
 
     return (
         <div className="container">
@@ -148,7 +144,18 @@ function LessonPage() {
                     </div>
                 ) : (
                     <>
-                        {lesson.video_url ? (
+                        {lesson.video_file ? (
+                            <div className="video-container">
+                                <video
+                                    controls
+                                    style={{ width: '100%', height: '100%', borderRadius: 'var(--radius)' }}
+                                    onPlay={() => handleProgress('in_progress')}
+                                >
+                                    <source src={lesson.video_file} type="video/mp4" />
+                                    Your browser does not support the video tag.
+                                </video>
+                            </div>
+                        ) : lesson.video_url ? (
                             isDirectVideoFile ? (
                                 <div className="video-container">
                                     <video
@@ -180,7 +187,7 @@ function LessonPage() {
                                     <div>
                                         <h3 style={{ marginBottom: '0.75rem' }}>Open Lesson Video</h3>
                                         <p style={{ color: 'var(--gray)', marginBottom: '1rem' }}>
-                                            This lesson uses an external video link, so it should be opened in a new tab.
+                                            This lesson uses an external link, so it opens in a new tab.
                                         </p>
                                         <a
                                             href={normalizedUrl}

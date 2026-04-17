@@ -15,6 +15,45 @@ const { verifyToken } = require('../middleware/auth');
 router.use(verifyToken);
 
 // ============================================================
+// GET /api/progress/all
+// Get all progress records for the user (for history page)
+// ============================================================
+router.get('/all', async (req, res) => {
+    try {
+        const userId = req.user.user_id;
+
+        // Get all progress with lesson and course details
+        const [progress] = await pool.query(`
+            SELECT 
+                p.progress_id,
+                p.lesson_id,
+                p.status,
+                p.completed_at,
+                p.updated_at,
+                l.title as lesson_title,
+                c.course_id,
+                c.title as course_title
+            FROM progress p
+            JOIN lessons l ON p.lesson_id = l.lesson_id
+            JOIN courses c ON l.course_id = c.course_id
+            WHERE p.user_id = ?
+            ORDER BY p.updated_at DESC
+        `, [userId]);
+
+        res.json({
+            progress: progress
+        });
+
+    } catch (error) {
+        console.error('Get all progress error:', error);
+        res.status(500).json({
+            error: 'Failed to get progress',
+            message: 'An error occurred while fetching your progress.'
+        });
+    }
+});
+
+// ============================================================
 // GET /api/progress/stats
 // Get overall learning statistics for the user
 // ============================================================

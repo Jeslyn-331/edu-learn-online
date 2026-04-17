@@ -7,6 +7,7 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
+const path = require('path');
 require('dotenv').config();
 
 // Import database connection
@@ -51,6 +52,9 @@ app.use(express.urlencoded({ extended: true }));
 
 // HTTP request logging (useful for debugging)
 app.use(morgan('dev'));
+
+// Serve uploaded lesson videos from the local uploads folder.
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // ============================================================
 // API ROUTES

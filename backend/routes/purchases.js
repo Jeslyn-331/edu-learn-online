@@ -342,7 +342,7 @@ router.get('/', async (req, res) => {
         // Get lesson purchases
         const [lessonPurchases] = await pool.query(`
             SELECT p.purchase_id, p.price, p.purchased_at,
-                   l.lesson_id, l.title as lesson_title, l.video_url,
+                   l.lesson_id, l.title as lesson_title, l.video_url, l.video_file,
                    c.course_id, c.title as course_title,
                    u.name as instructor_name
             FROM purchases p
