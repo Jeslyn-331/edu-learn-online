@@ -260,3 +260,65 @@ INSERT INTO lessons (course_id, title, content, video_url, video_file, price, le
 -- users <──> courses  (via enrollments table)
 -- users <──> lessons  (via progress table)
 -- ============================================================
+
+-- ============================================================
+-- MIGRATION: Add Certificates Table
+-- Run this script if you already have the database set up
+-- and just need to add the new certificates table
+-- ============================================================
+
+USE edulearn;
+
+-- Create the certificates table (only if it doesn't exist)
+CREATE TABLE IF NOT EXISTS certificates (
+    certificate_id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    course_id INT NOT NULL,
+    certificate_code VARCHAR(50) NOT NULL UNIQUE,   -- Unique code like "CERT-2026-XXXX"
+    issue_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    file_url VARCHAR(500) NULL,                     -- Optional: S3 URL for PDF certificate
+    
+    -- Foreign keys
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (course_id) REFERENCES courses(course_id) ON DELETE CASCADE,
+    
+    -- Prevent duplicate certificates for same user + course
+    UNIQUE KEY unique_certificate (user_id, course_id),
+    INDEX idx_certificates_user (user_id),
+    INDEX idx_certificates_course (course_id),
+    INDEX idx_certificates_code (certificate_code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Verify the table was created
+SELECT 'Certificates table created successfully!' AS status;
+SHOW COLUMNS FROM certificates;
+
+-- ============================================================
+-- Migration: Add duration field to courses table
+-- Allows instructors to set estimated course duration
+-- ============================================================
+
+USE edulearn;
+
+-- Add duration column to courses table (in hours)
+ALTER TABLE courses 
+ADD COLUMN duration INT DEFAULT NULL COMMENT 'Estimated course duration in hours';
+
+-- Update existing courses with default duration (optional)
+-- UPDATE courses SET duration = 10 WHERE duration IS NULL;
+
+
+-- ============================================================
+-- Lesson Video Upload Migration
+-- Adds uploaded MP4 support to the lessons table
+-- ============================================================
+
+USE edulearn;
+
+ALTER TABLE lessons
+ADD COLUMN video_file VARCHAR(500) NULL AFTER video_url;
+
+-- Keep the rule simple: every lesson must have either a URL or a file.
+ALTER TABLE lessons
+ADD CONSTRAINT chk_lessons_video_source
+CHECK (video_url IS NOT NULL OR video_file IS NOT NULL);
